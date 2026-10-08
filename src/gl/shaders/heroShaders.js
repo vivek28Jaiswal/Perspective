@@ -42,12 +42,15 @@ export const HERO_VERTEX_SHADER = `
     float sinU = sin(u * PI_HALF);
     float cosU = cos(u * PI_HALF);
     float cosSqU = cosU * cosU;
-    float sinSqU = sinU * sinU;
+
+    // Responsive / mobile detection: 0.0 on desktop (aspect >= 1.4), 1.0 on mobile portrait
+    float isMobile = clamp((1.35 - screenAspect) / 0.75, 0.0, 1.0);
 
     // ============================================================
     // 1. STATE 0: INSIDE CONCAVE WARP (VIVEK VISUALSS - UNDER KE SIDE)
     // ============================================================
-    float defHalfW0 = 0.24;
+    // On mobile, text is bold and large (~88% width) while strictly maintaining text aspect ratio
+    float defHalfW0 = mix(0.24, 0.44, isMobile);
     float defHalfH0 = (defHalfW0 * screenAspect) / u_textAspect0;
     vec2 posFlat0 = vec2(a_grid.x * defHalfW0, a_grid.y * defHalfH0);
 
@@ -64,7 +67,8 @@ export const HERO_VERTEX_SHADER = `
     float halfWidth3D_0 = (targetSpan0 * zNear0) / focal0;
     float X_base0 = u_curve0 * halfWidth3D_0 * sideBias0;
 
-    float targetEdgeHalfH0 = 0.84;
+    // Proportionate edge height on mobile prevents vertical stretching
+    float targetEdgeHalfH0 = mix(0.84, 0.35, isMobile);
     float halfHeight3D_0 = (targetEdgeHalfH0 * zNear0) / (focal0 * screenAspect);
     float pitchTilt0 = (mx * 0.14 - my * 0.12) * sinU;
     float Y_center0 = pitchTilt0;
@@ -72,41 +76,41 @@ export const HERO_VERTEX_SHADER = `
     float X_3D_0 = X_base0 + v * coneSlant0 * (halfHeight3D_0 * screenAspect);
     float Y_3D_0 = Y_center0 + v * halfHeight3D_0;
 
-    vec2 posWarp0 = vec2((X_3D_0 * focal0) / Z0, (Y_3D_0 * focal0 * screenAspect) / Z0);
+    // Controlled slight overflow (~15%) so text does not fly excessively far off-screen
+    float xSpanScale0 = mix(1.0, 1.18, isMobile);
+    vec2 posWarp0 = vec2((X_3D_0 * focal0 * xSpanScale0) / Z0, (Y_3D_0 * focal0 * screenAspect) / Z0);
     vec2 posFinal0 = mix(posFlat0, posWarp0, h);
 
     // ============================================================
     // 2. STATE 1: EXACT SMOOTH 3D PERSPECTIVE WARP (MATCHING SHOWREEL REFERENCE)
     // ============================================================
-    float defHalfW1 = 0.26;
+    float defHalfW1 = mix(0.26, 0.44, isMobile);
     float defHalfH1 = (defHalfW1 * screenAspect) / u_textAspect1;
     vec2 posFlat1 = vec2(a_grid.x * defHalfW1, a_grid.y * defHalfH1);
 
-    // Smooth hyperbolic fold profile:
-    // Seamless rounded apex in center (zero creases/edges), smooth linear perspective slope on wings
+    // Smooth hyperbolic fold profile
     float rawFold = sqrt(u * u + 0.04) - 0.20;
     float fold = clamp(rawFold / 0.8198, 0.0, 1.0);
 
-    // 3D perspective depth matching SHOWREEL (center is closest, wings recede smoothly)
+    // 3D perspective depth matching SHOWREEL
     float zNear1 = 1.15;
     float zFar1 = 1.68;
     float zBase1 = zNear1 + (zFar1 - zNear1) * fold;
     float zMouseShift1 = -mx * u * 0.16;
     float Z1 = max(0.85, zBase1 + zMouseShift1);
 
-    // Clean horizontal spread: occupies ~93% screen width with perspective spacing
     float targetSpan1 = 0.93;
     float sideBias1 = 1.0 + mx * u * 0.10;
-
-    // Outward perspective fanning matching SHOWREEL (tops fan outward along the wings)
     float fanSlant1 = 0.07 * u;
-    float x_proj1 = u * targetSpan1 * sideBias1 + v * fanSlant1;
 
-    // Symmetrical perspective rise:
-    // Center dips softly into trough (-0.13), wings rise smoothly (+0.19)
-    float yTrough1 = -0.13;
-    float vRise1 = 0.32 * fold;
-    float halfH1 = 0.34 * (zNear1 / Z1);
+    // Controlled slight overflow (~14%) on mobile
+    float xSpanScale1 = mix(1.0, 1.18, isMobile);
+    float x_proj1 = (u * targetSpan1 * sideBias1 + v * fanSlant1) * xSpanScale1;
+
+    // Symmetrical perspective rise
+    float yTrough1 = mix(-0.13, -0.05, isMobile);
+    float vRise1 = mix(0.32, 0.15, isMobile) * fold;
+    float halfH1 = mix(0.34, 0.17, isMobile) * (zNear1 / Z1);
     float pitchTilt1 = (mx * 0.08 - my * 0.06) * u;
     float y_proj1 = yTrough1 + vRise1 + v * halfH1 + pitchTilt1;
 
@@ -118,7 +122,7 @@ export const HERO_VERTEX_SHADER = `
 
     gl_Position = vec4(posFinal.x, posFinal.y, 0.0, 1.0);
   }
-`
+`;
 
 export const HERO_FRAGMENT_SHADER = `
   precision highp float;
@@ -149,4 +153,4 @@ export const HERO_FRAGMENT_SHADER = `
     if (col.a < 0.02) discard;
     gl_FragColor = col;
   }
-`
+`;

@@ -76,58 +76,130 @@ export default function PerspectiveWarp({ onStateChange }) {
     }
 
     let touchStartY = 0
-    const handleTouchStart = (e) => {
-      touchStartY = e.touches[0].clientY
+    let isTouching = false
+
+    const isInteractiveNavTouch = (e) => {
+      const target = e.target
+      if (!target) return false
+      return !!(
+        target.closest('header') ||
+        target.closest('nav') ||
+        target.closest('button') ||
+        target.closest('[role="button"]') ||
+        target.closest('a')
+      )
     }
+
+    const handleTouchStart = (e) => {
+      if (isInteractiveNavTouch(e)) {
+        isTouching = false
+        return
+      }
+
+      if (e.touches && e.touches.length > 0) {
+        touchStartY = e.touches[0].clientY
+        isTouching = true
+        setIsHovered(true)
+        stateRef.current.targetHover = 1.0
+
+        const container = containerRef.current
+        if (container) {
+          const rect = container.getBoundingClientRect()
+          const x = ((e.touches[0].clientX - rect.left) / rect.width) * 2 - 1
+          const y = -(((e.touches[0].clientY - rect.top) / rect.height) * 2 - 1)
+          stateRef.current.targetMouseX = Math.max(-1, Math.min(1, x))
+          stateRef.current.targetMouseY = Math.max(-1, Math.min(1, y))
+        }
+      }
+    }
+
+    const handleTouchMove = (e) => {
+      if (!isTouching || isInteractiveNavTouch(e)) return
+
+      if (e.touches && e.touches.length > 0) {
+        const container = containerRef.current
+        if (container) {
+          const rect = container.getBoundingClientRect()
+          const x = ((e.touches[0].clientX - rect.left) / rect.width) * 2 - 1
+          const y = -(((e.touches[0].clientY - rect.top) / rect.height) * 2 - 1)
+          stateRef.current.targetMouseX = Math.max(-1, Math.min(1, x))
+          stateRef.current.targetMouseY = Math.max(-1, Math.min(1, y))
+        }
+      }
+    }
+
     const handleTouchEnd = (e) => {
+      if (!isTouching || isInteractiveNavTouch(e)) {
+        isTouching = false
+        return
+      }
+      isTouching = false
+
       const deltaY = touchStartY - (e.changedTouches[0]?.clientY || touchStartY)
       const now = performance.now()
-      if (now - lastToggleTime < 450) return
 
-      if (deltaY > 35) {
-        // Swipe up -> scroll down -> flip to WEB DESIGNER
-        if (!stateRef.current.isWebDesigner) {
-          if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
-          stateRef.current.isWebDesigner = true
-          stateRef.current.targetCurve = 1.0
-          stateRef.current.targetHover = 1.0
-          setIsWebDesigner(true)
-          setIsHovered(true)
-          onStateChange?.(true)
-          lastToggleTime = now
-        }
-      } else if (deltaY < -35) {
-        // Swipe down -> scroll up -> first show VIVEK VISUALSS 3D curve, then settle to initial state
-        if (stateRef.current.isWebDesigner) {
-          if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
-          stateRef.current.isWebDesigner = false
-          stateRef.current.targetCurve = 0.0
-          stateRef.current.targetHover = 1.0
-          setIsWebDesigner(false)
-          setIsHovered(true)
-          onStateChange?.(false)
-          lastToggleTime = now
+      if (now - lastToggleTime >= 450) {
+        if (deltaY > 35) {
+          // Swipe up -> flip to WEB DESIGNER
+          if (!stateRef.current.isWebDesigner) {
+            if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+            stateRef.current.isWebDesigner = true
+            stateRef.current.targetCurve = 1.0
+            stateRef.current.targetHover = 1.0
+            setIsWebDesigner(true)
+            setIsHovered(true)
+            onStateChange?.(true)
+            lastToggleTime = now
+            return
+          }
+        } else if (deltaY < -35) {
+          // Swipe down -> flip back to VIVEK VISUALSS
+          if (stateRef.current.isWebDesigner) {
+            if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
+            stateRef.current.isWebDesigner = false
+            stateRef.current.targetCurve = 0.0
+            stateRef.current.targetHover = 1.0
+            setIsWebDesigner(false)
+            setIsHovered(true)
+            onStateChange?.(false)
+            lastToggleTime = now
 
-          settleTimerRef.current = setTimeout(() => {
-            if (!stateRef.current.isWebDesigner) {
-              stateRef.current.targetHover = 0.0
-              stateRef.current.targetMouseX = 0
-              stateRef.current.targetMouseY = 0
-              setIsHovered(false)
-            }
-          }, 480)
+            settleTimerRef.current = setTimeout(() => {
+              if (!stateRef.current.isWebDesigner) {
+                stateRef.current.targetHover = 0.0
+                stateRef.current.targetMouseX = 0
+                stateRef.current.targetMouseY = 0
+                setIsHovered(false)
+              }
+            }, 480)
+            return
+          }
         }
+      }
+
+      // If in VIVEK VISUALSS mode, ease back to flat after release
+      if (!stateRef.current.isWebDesigner) {
+        settleTimerRef.current = setTimeout(() => {
+          if (!stateRef.current.isWebDesigner && !isTouching) {
+            stateRef.current.targetHover = 0.0
+            stateRef.current.targetMouseX = 0
+            stateRef.current.targetMouseY = 0
+            setIsHovered(false)
+          }
+        }, 300)
       }
     }
 
     window.addEventListener('wheel', handleWheel, { passive: true })
     window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    window.addEventListener('touchmove', handleTouchMove, { passive: true })
     window.addEventListener('touchend', handleTouchEnd, { passive: true })
 
     return () => {
       if (settleTimerRef.current) clearTimeout(settleTimerRef.current)
       window.removeEventListener('wheel', handleWheel)
       window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
       window.removeEventListener('touchend', handleTouchEnd)
     }
   }, [onStateChange])
@@ -440,11 +512,11 @@ export default function PerspectiveWarp({ onStateChange }) {
       {/* Subtitle paragraph under typography - ONLY shown on VIVEK VISUALSS screen when unhovered */}
       {!isWebDesigner && (
         <div
-          className={`absolute top-[calc(50%+28px)] sm:top-[calc(50%+32px)] md:top-[calc(50%+36px)] flex flex-col items-center justify-center text-center pointer-events-none transition-all duration-300 ${
+          className={`absolute top-[calc(50%+20px)] sm:top-[calc(50%+24px)] md:top-[calc(50%+30px)] px-3 flex flex-col items-center justify-center text-center pointer-events-none transition-all duration-300 ${
             isHovered ? 'opacity-0' : 'opacity-100'
           }`}
         >
-          <p className="text-[11px] sm:text-[12px] md:text-[13px] font-black text-black uppercase tracking-tight leading-[1.12]">
+          <p className="text-[12.5px] sm:text-[12.5px] md:text-[13px] font-black text-black uppercase tracking-tight leading-[1.12]">
             (DON'T JUST LOOK.)<br />
             MOVE AROUND. SOMETHING MIGHT HAPPEN.<br />
             A LITTLE EXPERIMENT WITH TYPE, MOTION,<br />

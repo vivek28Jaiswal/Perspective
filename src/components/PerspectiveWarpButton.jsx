@@ -301,7 +301,13 @@ export default function PerspectiveWarpButton({
     }
   }, [isDark, text])
 
+  const isResponsiveMobile = () => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth < 768 || window.matchMedia('(hover: none)').matches
+  }
+
   const handleMouseEnter = () => {
+    if (isResponsiveMobile()) return
     setIsHovered(true)
     stateRef.current.isHovered = true
     stateRef.current.targetHover = 1.0
@@ -311,6 +317,7 @@ export default function PerspectiveWarpButton({
   }
 
   const handleMouseMove = (e) => {
+    if (isResponsiveMobile()) return
     const button = buttonRef.current
     if (!button) return
 
@@ -327,6 +334,7 @@ export default function PerspectiveWarpButton({
   }
 
   const handleMouseLeave = () => {
+    if (isResponsiveMobile()) return
     setIsHovered(false)
     stateRef.current.isHovered = false
     stateRef.current.targetHover = 0.0
@@ -337,11 +345,22 @@ export default function PerspectiveWarpButton({
     }
   }
 
+  const handleClick = (e) => {
+    e.stopPropagation()
+    onClick?.(e)
+  }
+
+  const handleTouch = (e) => {
+    e.stopPropagation()
+  }
+
   return (
     <button
       ref={buttonRef}
       type="button"
-      onClick={onClick}
+      onClick={handleClick}
+      onTouchStart={handleTouch}
+      onTouchEnd={handleTouch}
       onMouseEnter={handleMouseEnter}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -350,23 +369,24 @@ export default function PerspectiveWarpButton({
       } ${className}`}
       aria-label={ariaLabel || text}
     >
-      {/* 100% native vector text: ensures razor-sharp text quality, exact original font size & design */}
+      {/* 100% native vector text: stays 100% visible on mobile, fades on desktop hover */}
       <span
         ref={textSpanRef}
         className={`tracking-wider pointer-events-none transition-opacity duration-150 ${
-          isHovered ? 'opacity-0' : 'opacity-100'
+          isHovered ? 'md:opacity-0' : 'opacity-100'
         }`}
       >
         {text}
       </span>
 
-      {/* WebGL Canvas activates on hover with the 3D perspective warp ribbon animation */}
+      {/* WebGL Canvas: hidden on responsive screens, only activates on desktop hover */}
       <canvas
         ref={canvasRef}
-        className={`absolute inset-0 w-full h-full pointer-events-none block transition-opacity duration-150 ${
+        className={`hidden md:block absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-150 ${
           isHovered ? 'opacity-100' : 'opacity-0'
         }`}
       />
     </button>
   )
 }
+
